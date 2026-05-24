@@ -8,7 +8,7 @@ relaxation:
    by the LP-relaxation Lagrangian multiplier `λ_k*` (mean / sum / max
    aggregation supported).
 2. **Feasibility-certified counterfactual**: minimum-L1 perturbation that flips
-   the policy's argmax **and** is accepted by a problem-specific CSP / HGS
+   the policy's argmax **and** is accepted by a problem-specific CSP
    feasibility-decision oracle.
 3. **Bonferroni-PAC sufficient subset**: family-wise (1-δ)-PAC Hoeffding test
    along the greedy attribution ordering.
@@ -20,10 +20,9 @@ Counterfactuals and Bonferroni-PAC Sufficient Subsets for Neural CO Policies*
 ## Install
 
 ```bash
-pip install neuro-co-cax                       # core
-pip install neuro-co-cax[ortools]              # OR-Tools backend (OP, FJSP)
-pip install neuro-co-cax[pyvrp]                # PyVRP HGS backend (CVRPTW)
-pip install neuro-co-cax[ortools,pyvrp,plots]  # full
+pip install neuro-co-cax                  # core
+pip install neuro-co-cax[ortools]         # CSP feasibility backend (CVRPTW, OP, FJSP)
+pip install neuro-co-cax[ortools,plots]   # full (with matplotlib + pandas)
 ```
 
 ## Quickstart
@@ -67,7 +66,7 @@ print(cf.flipped.sum().item(), "feasibility-certified flips")
 ```bash
 git clone https://github.com/sohaibafifi/neuro-co-cax
 cd neuro-co-cax
-pip install -e .[ortools,pyvrp,plots,dev]
+pip install -e .[ortools,plots,dev]
 # 1) Train a policy (one per problem, three seeds each)
 # 2) Adjudicate:
 python examples/adjudicate_all.py --out results/

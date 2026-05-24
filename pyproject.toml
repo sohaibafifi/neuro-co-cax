@@ -35,10 +35,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Constraint-programming certification backend for OP / FJSP.
+# Constraint-programming certification backend for VRPTW / OP / FJSP.
 ortools = ["ortools~=9.15"]
-# Heuristic-search certification backend for CVRPTW.
-pyvrp = ["pyvrp~=0.11.0", "pebble~=5.2"]
 # Plot helpers for adjudication / aggregation figures.
 plots = ["matplotlib~=3.8", "pandas>=2.0,<3"]
 # Test suite.

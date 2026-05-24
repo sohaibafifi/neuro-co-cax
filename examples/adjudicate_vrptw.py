@@ -14,9 +14,9 @@ Usage:
     # Smoke run (untrained policy, noisy numbers):
     python examples/adjudicate_vrptw.py --seeds 0 --batch-size 4 --cf-shots 16
 
-Combinatorial certification uses the PyVRP HGS feasibility decision
-(install with `pip install neuro-co-cax[pyvrp]`); CVRPTW arithmetic
-checks alone run without that extra.
+Combinatorial certification uses an OR-Tools CSP feasibility-decision
+model for CVRPTW (install with `pip install neuro-co-cax[ortools]`);
+the arithmetic check alone runs without that extra.
 """
 
 from __future__ import annotations
