@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: "Constraint-Anchored Attribution (CAX)"
+message: "If you use this software, please cite the companion paper."
+type: software
+authors:
+  - given-names: Sohaib
+    family-names: Afifi
+    email: sohaib.afifi@univ-artois.fr
+    affiliation: "Univ. Artois, UR 3926, LGI2A, F-62400 Béthune, France"
+license: MIT
+repository-code: "https://github.com/sohaibafifi/neuro-co-cax"
+preferred-citation:
+  type: article
+  title: "Constraint-Anchored Attribution: Feasibility-Certified Counterfactuals and Bonferroni-PAC Sufficient Subsets for Neural CO Policies"
+  authors:
+    - given-names: Sohaib
+      family-names: Afifi
+  year: 2026
+  url: "https://arxiv.org/abs/XXXX.XXXXX"

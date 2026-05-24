@@ -1,0 +1,62 @@
+[project]
+name = "neuro-co-cax"
+version = "0.2.0"
+description = "Constraint-Anchored Attribution: LP-weighted attribution, CSP-certified counterfactuals, and Bonferroni-PAC sufficient subsets for neural combinatorial-optimisation policies."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Sohaib Afifi", email = "sohaib.afifi@univ-artois.fr" },
+]
+keywords = [
+  "explainable-ai",
+  "combinatorial-optimization",
+  "constraint-programming",
+  "counterfactual-explanation",
+  "neural-routing",
+  "pac",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core deps. rl4co + torch are needed to instantiate the policies
+# CAX explains; tensordict for batched-state handling.
+dependencies = [
+  "torch>=2.0,<3",
+  "tensordict>=0.12,<1",
+  "numpy>=1.24,<3",
+  "rl4co~=0.6.0",
+]
+
+[project.optional-dependencies]
+# Constraint-programming certification backend for OP / FJSP.
+ortools = ["ortools~=9.15"]
+# Heuristic-search certification backend for CVRPTW.
+pyvrp = ["pyvrp~=0.11.0", "pebble~=5.2"]
+# Plot helpers for adjudication / aggregation figures.
+plots = ["matplotlib~=3.8", "pandas>=2.0,<3"]
+# Test suite.
+dev = ["pytest>=7", "ruff>=0.4", "pyright>=1.1"]
+
+[project.urls]
+Homepage = "https://github.com/sohaibafifi/neuro-co-cax"
+Repository = "https://github.com/sohaibafifi/neuro-co-cax"
+Issues = "https://github.com/sohaibafifi/neuro-co-cax/issues"
+Paper = "https://arxiv.org/abs/XXXX.XXXXX"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/neuro_co"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
