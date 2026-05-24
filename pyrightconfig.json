@@ -1,0 +1,21 @@
+{
+  "include": ["src"],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/.venv-public",
+    "tests"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+
+  "// torch private imports": "torch's public API resolves `torch.zeros` etc. at runtime; pyright sees them as private exports because torch/__init__.py re-imports them rather than listing in __all__.",
+  "reportPrivateImportUsage": "none",
+
+  "// optional sibling pkgs": "neuro_co.problems is an optional plug-in registry; CSP feasibility falls back to arithmetic when absent.",
+  "reportMissingImports": "none",
+  "reportAttributeAccessIssue": "none",
+
+  "reportReturnType": "warning",
+  "reportArgumentType": "warning"
+}
