@@ -75,6 +75,10 @@ def get_multipliers(
         from neuro_co.cax.duals.op_lp import op_lp_duals
 
         return op_lp_duals(instance, **kwargs)
+    if key == ("op", "subgrad"):
+        from neuro_co.cax.duals.op_subgrad import op_subgrad_duals
+
+        return op_subgrad_duals(instance, **kwargs)
     if key == ("fjsp", "lp"):
         from neuro_co.cax.duals.fjsp_lp import fjsp_lp_duals
 
@@ -85,7 +89,7 @@ def get_multipliers(
         return fjsp_subgrad_duals(instance, **kwargs)
     raise NotImplementedError(
         f"No multiplier estimator for problem={problem!r}, method={method!r}. "
-        f"Paper-cax v1 covers VRPTW (lp, subgrad), OP (lp), FJSP (lp, subgrad)."
+        f"Paper-cax v1 covers VRPTW (lp, subgrad), OP (lp, subgrad), FJSP (lp, subgrad)."
     )
 
 
