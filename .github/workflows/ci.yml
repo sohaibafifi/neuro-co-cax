@@ -18,10 +18,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: uv pip install --system -e ".[ortools,pyvrp,dev]"
+        run: uv sync --extra ortools --extra pyvrp --extra dev
       - name: Lint
-        run: ruff check src tests
+        run: uv run ruff check src tests
       - name: Pyright
-        run: pyright src
+        run: uv run pyright src
       - name: Tests
-        run: pytest tests/ -q
+        run: uv run pytest tests/ -q
