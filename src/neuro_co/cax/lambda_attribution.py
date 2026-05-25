@@ -51,7 +51,7 @@ class LambdaAttribution:
         `[K, B, T, N]` float tensor: per-family per-node attribution.
         Useful for downstream per-node, per-constraint heatmaps.
     feature_keys_per_family
-        `[K]` list of tuples — the feature keys actually used per
+        `[K]` list of tuples, the feature keys actually used per
         family (intersected with what's present in the TensorDict).
     """
 
@@ -141,7 +141,7 @@ def lambda_attribution(
         )
 
     # Filter family feature lists down to keys actually present in
-    # the TensorDict — missing keys (depot-omitted variants, env
+    # the TensorDict. Missing keys (depot-omitted variants, env
     # toggle flags) shouldn't crash the decomposition.
     available_keys = set(td.keys())
     filtered_families: list[tuple[str, tuple[str, ...]]] = []

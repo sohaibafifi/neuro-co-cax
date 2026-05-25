@@ -3,7 +3,7 @@
 Relaxes the *capacity* and *time-window* constraint families into
 the objective; the remaining subproblem is a soft-TSP-with-penalty
 solved by **nearest-neighbour insertion** (a cheap, monotone
-heuristic — Lagrangian duality does not require subproblem
+heuristic, Lagrangian duality does not require subproblem
 optimality, only consistent improvement at the multiplier update).
 
 Two dualised families surface multipliers:
@@ -14,7 +14,7 @@ Two dualised families surface multipliers:
 The `spatial` family stays in the subproblem as the routing cost
 itself, so its multiplier is not estimated by this backend (set
 to 0.0 in the report). The LP backend produces a meaningful
-`spatial` dual (degree-constraint shadow prices) — this is one
+`spatial` dual (degree-constraint shadow prices), this is one
 documented limitation of the subgrad backend; paper-cax §4.X uses
 it as the head-to-head ablation.
 

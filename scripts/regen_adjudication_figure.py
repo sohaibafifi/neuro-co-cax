@@ -4,7 +4,7 @@ Reads CSP-certified adjudication.json across seeds 0/1/2 for each
 of CVRPTW, OP, FJSP and renders a grouped bar chart of top-$1$
 family agreement with the counterfactual-derived signal, mean +/-
 std error across seeds. Overwrites
-``papers/paper-cax/kbs/figs/cax_w1_adjudication.pdf``.
+``figs/adjudication.pdf``.
 """
 
 from __future__ import annotations
@@ -103,4 +103,4 @@ def main(out_path: Path):
 
 
 if __name__ == "__main__":
-    main(Path("papers/paper-cax/kbs/figs/cax_w1_adjudication.pdf"))
+    main(Path("figs/adjudication.pdf"))

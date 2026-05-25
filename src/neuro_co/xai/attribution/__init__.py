@@ -1,10 +1,10 @@
 """Attribution methods for autoregressive CO policies.
 
-- `AttributionTrace` — common dataclass returned by every method.
-- `gradient_attribution` — gradient x feature (cheap baseline).
-- `contrastive_attribution` — gradient of `log pi(a) - log pi(b)`.
-- `integrated_gradients` — Riemann-sum path integral.
-- `deeplift_attribution` — DeepLIFT-Rescale via backward hooks.
+- `AttributionTrace`, common dataclass returned by every method.
+- `gradient_attribution`, gradient x feature (cheap baseline).
+- `contrastive_attribution`, gradient of `log pi(a) - log pi(b)`.
+- `integrated_gradients`, Riemann-sum path integral.
+- `deeplift_attribution`, DeepLIFT-Rescale via backward hooks.
 
 Method-specific modules live alongside this file; `_common` holds the
 shared helpers (feature collection, rollout driver, trace packing).

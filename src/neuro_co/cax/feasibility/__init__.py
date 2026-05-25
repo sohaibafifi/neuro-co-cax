@@ -6,7 +6,7 @@ satisfies the problem's structural constraints (non-negative
 demand, non-empty TWs, positive capacity, non-negative processing
 times, ...).
 
-v0.3 (M3) backends are arithmetic — they verify field-value
+v0.3 (M3) backends are arithmetic, they verify field-value
 sanity directly. v0.4 (M3.5) will swap in CP-SAT decision queries
 ("does there exist a feasible routing for this instance?") via
 the existing `BASELINE_SOLVERS` registry. Arithmetic checks are

@@ -1,19 +1,14 @@
-"""PAC sufficient-subset per method (KBS short communication, B3).
+"""Deletion-curve faithfulness sweep.
 
-For each attribution method, build an AttributionTrace whose
-`top_k_nodes` is the full per-step node ranking, then drive
-`neuro_co.cax.cp_minimal_subset` with that trace. Record how many
-(b, t) cells succeed (subset found within `max_k`) and the mean
-sufficient-subset size among successes.
+For each (problem, method) pair, run attribution once with top_k=10
+and then call `deletion_flip_rate` at k in {1, 3, 5, 10}. Report the
+mean flip rate per k and the across-k AUC.
 
-Defaults (matching paper text):
-    pac_epsilon = 0.2
-    pac_delta   = 0.2
-    sigma       = 0.05
-    max_k       = 25
-    bonferroni  = True  -> M_bonf = 70
+A high flip rate at k means that masking the top-k attributed nodes
+changes the policy's argmax, i.e. the attribution actually
+pinpointed inputs the policy relied on. Higher AUC = more faithful.
 
-CVRPTW seed-0, B = 8, T = 8 -> 64 cells per method.
+Output: one JSON per problem under ``experiments/faithfulness/``.
 """
 
 from __future__ import annotations
@@ -21,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+import traceback
 from pathlib import Path
 
 import torch
@@ -32,6 +28,7 @@ from neuro_co.xai.attribution import (
     gradient_attribution,
     integrated_gradients,
 )
+from neuro_co.xai.faithfulness import deletion_flip_rate
 from neuro_co.cax.benchmark import (
     _instantiate,
     _load_ckpt,
@@ -39,10 +36,12 @@ from neuro_co.cax.benchmark import (
     _pick_device,
     _resolve_ckpt,
 )
-from neuro_co.cax.cp_minimal_subset import cp_minimal_subset
 from neuro_co.cax.lambda_attribution import lambda_attribution
 
 
+# Union of every feature key consumed by any constraint family per
+# problem. The attribution code drops keys that aren't in the
+# TensorDict, so listing extras is safe.
 PROBLEM_FEATURE_UNION: dict[str, tuple[str, ...]] = {
     "vrptw": ("locs", "demand", "demand_linehaul", "time_windows", "durations"),
     "fjsp": ("proc_times", "num_eligible"),
@@ -50,12 +49,11 @@ PROBLEM_FEATURE_UNION: dict[str, tuple[str, ...]] = {
 }
 
 
-def _present(td, keys):
+def _present(td, keys: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(
-        k for k in keys
-        if k in td.keys()
-        and hasattr(td[k], "dtype")
-        and td[k].dtype != torch.bool
+        k
+        for k in keys
+        if k in td.keys() and hasattr(td[k], "dtype") and td[k].dtype != torch.bool
     )
 
 
@@ -69,12 +67,24 @@ def _num_nodes(td) -> int:
     return 0
 
 
-def _cax_trace(model, env, td, *, problem, max_steps, top_k, multipliers="lp"):
-    """Flatten LP-CAX per-family node scores into an AttributionTrace."""
+def _cax_trace(
+    model, env, td, *, problem: str, max_steps: int, top_k: int, multipliers: str
+) -> AttributionTrace:
+    """Run lambda_attribution and flatten to AttributionTrace.
+
+    Per-node CAX score = sum_k |mu_k| * per_family_node_scores[k].
+    With ``multipliers='lp'`` the weighting follows the LP duals
+    (the headline CAX variant in the paper). With ``multipliers=None``
+    we get the equal-weight proxy.
+    """
     policy = model.policy if hasattr(model, "policy") else model
     la = lambda_attribution(
-        policy, env, td,
-        problem=problem, top_k=top_k, max_steps=max_steps,
+        policy,
+        env,
+        td,
+        problem=problem,
+        top_k=top_k,
+        max_steps=max_steps,
         multipliers=multipliers,
     )
     pfn = la.per_family_node_scores  # [K, B, T, N]
@@ -101,104 +111,98 @@ def run_problem(
     problem: str,
     run_dir: Path,
     *,
-    batch: int = 8,
+    batch: int = 16,
     max_steps: int = 8,
-    pac_epsilon: float = 0.2,
-    pac_delta: float = 0.2,
-    sigma: float = 0.05,
-    max_k: int = 25,
+    top_k_max: int = 10,
+    ks: tuple[int, ...] = (1, 3, 5, 10),
     seed: int = 0,
-):
+) -> dict:
     cfg = _load_hydra_cfg(run_dir)
     env, model = _instantiate(cfg)
-    _load_ckpt(model, _resolve_ckpt(run_dir))
+    ckpt = _resolve_ckpt(run_dir)
+    _load_ckpt(model, ckpt)
     device = _pick_device()
     model = model.to(device).eval()
 
-    torch.manual_seed(seed)
+    torch.manual_seed(int(seed))
     td = env.reset(batch_size=batch).to(device)
     policy = model.policy if hasattr(model, "policy") else model
 
     n_nodes = _num_nodes(td)
-    top_k_full = n_nodes  # full ranking so cp_minimal_subset can grow up to max_k
+    top_k = min(top_k_max, n_nodes) if n_nodes else top_k_max
+    ks = tuple(k for k in ks if k <= top_k)
+
     union = _present(td, PROBLEM_FEATURE_UNION[problem])
     print(
-        f"[{problem}] B={batch} T={max_steps} N={n_nodes} max_k={max_k} "
-        f"eps={pac_epsilon} delta={pac_delta} sigma={sigma} "
-        f"feature_keys={union}",
+        f"[{problem}] B={batch} T={max_steps} N={n_nodes} top_k={top_k} "
+        f"ks={ks} feature_keys={union}",
         flush=True,
     )
 
-    method_factories = {
+    methods = {
         "gradient": lambda: gradient_attribution(
             policy, env, td,
-            feature_keys=union, top_k=top_k_full, max_steps=max_steps,
+            feature_keys=union, top_k=top_k, max_steps=max_steps,
         ),
         "ig": lambda: integrated_gradients(
             policy, env, td,
-            feature_keys=union, top_k=top_k_full, max_steps=max_steps,
+            feature_keys=union, top_k=top_k, max_steps=max_steps,
             ig_steps=8, problem=problem,
         ),
         "deeplift": lambda: deeplift_attribution(
             policy, env, td,
-            feature_keys=union, top_k=top_k_full, max_steps=max_steps,
+            feature_keys=union, top_k=top_k, max_steps=max_steps,
             problem=problem,
         ),
         "contrastive": lambda: contrastive_attribution(
             policy, env, td,
-            feature_keys=union, top_k=top_k_full, max_steps=max_steps,
+            feature_keys=union, top_k=top_k, max_steps=max_steps,
         ),
         "cax": lambda: _cax_trace(
             model, env, td,
-            problem=problem, max_steps=max_steps, top_k=top_k_full,
+            problem=problem, max_steps=max_steps, top_k=top_k,
+            multipliers="lp",
         ),
     }
 
-    results = {}
-    for name, factory in method_factories.items():
-        print(f"[{problem}] running {name}", flush=True)
+    results: dict[str, dict] = {}
+    for name, factory in methods.items():
         t0 = time.time()
+        print(f"[{problem}] running {name}", flush=True)
         try:
             trace = factory()
         except Exception as exc:  # noqa: BLE001
-            print(f"[{problem}] {name} trace FAILED: {type(exc).__name__}: {exc}", flush=True)
-            results[name] = {"error": f"{type(exc).__name__}: {exc}"}
-            continue
-        try:
-            report = cp_minimal_subset(
-                policy, env, td,
-                pac_epsilon=pac_epsilon,
-                pac_delta=pac_delta,
-                sigma=sigma,
-                max_k=max_k,
-                feature_keys=union,
-                max_steps=max_steps,
-                trace=trace,
-                bonferroni=True,
+            print(
+                f"[{problem}] {name} FAILED at attribution: "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
             )
-        except Exception as exc:  # noqa: BLE001
-            print(f"[{problem}] {name} subset FAILED: {type(exc).__name__}: {exc}", flush=True)
+            traceback.print_exc()
             results[name] = {"error": f"{type(exc).__name__}: {exc}"}
             continue
-        sz = report.subset_size
-        succeeded = (sz > 0)
-        n_succ = int(succeeded.sum().item())
-        n_total = int(sz.numel())
-        mean_size = float(sz[succeeded].float().mean().item()) if n_succ else float("nan")
+        per_k: dict[int, float] = {}
+        for k in ks:
+            try:
+                report = deletion_flip_rate(
+                    trace, policy, env, td, top_k=k, baseline="mean"
+                )
+                per_k[int(k)] = float(report.mean_flip_rate)
+                print(
+                    f"  k={k}: flip_rate={report.mean_flip_rate:.4f} "
+                    f"steps={report.num_steps}",
+                    flush=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"  k={k}: FAILED {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
+                per_k[int(k)] = float("nan")
+        finite = [v for v in per_k.values() if v == v]
+        auc = float(sum(finite) / len(finite)) if finite else float("nan")
         dt = time.time() - t0
-        results[name] = {
-            "succeeded": n_succ,
-            "total": n_total,
-            "mean_subset_size": mean_size,
-            "samples_drawn_M": int(report.samples_drawn),
-            "elapsed_s": dt,
-        }
-        print(
-            f"[{problem}] {name}: {n_succ}/{n_total} succeeded, "
-            f"mean |S*|={mean_size:.2f}, M={report.samples_drawn} "
-            f"({dt:.1f}s)",
-            flush=True,
-        )
+        results[name] = {"per_k": per_k, "auc": auc, "elapsed_s": dt}
+        print(f"[{problem}] {name} AUC={auc:.4f} ({dt:.1f}s)", flush=True)
 
     out = {
         "problem": problem,
@@ -206,15 +210,12 @@ def run_problem(
         "batch": batch,
         "max_steps": max_steps,
         "num_nodes": n_nodes,
-        "pac_epsilon": pac_epsilon,
-        "pac_delta": pac_delta,
-        "sigma": sigma,
-        "max_k": max_k,
+        "ks": list(ks),
         "feature_keys_used": list(union),
         "methods": results,
     }
     out["seed"] = int(seed)
-    out_dir = Path("experiments/kbs_pac_subset")
+    out_dir = Path("experiments/faithfulness")
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{problem}_seed{int(seed)}.json"
     (out_dir / fname).write_text(json.dumps(out, indent=2))

@@ -136,7 +136,7 @@ def cp_minimal_subset(
         Gaussian neighbourhood std for `x'` sampling.
     feature_keys
         Which TensorDict keys participate in masking. If empty,
-        the function refuses (no reasonable default — depends on
+        the function refuses (no reasonable default, depends on
         the problem).
     max_k
         Largest subset size to try (default: number of nodes).

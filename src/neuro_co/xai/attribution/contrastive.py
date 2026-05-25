@@ -46,7 +46,7 @@ def contrastive_attribution(
             masked = log_p.detach().clone()
             masked.scatter_(-1, action.unsqueeze(-1), float("-inf"))
             # If a batch element has only one valid action, every entry
-            # of `masked` is -inf and `argmax` returns 0 — which may
+            # of `masked` is -inf and `argmax` returns 0, which may
             # itself be an *invalid* (already-masked) index. Detect via
             # the per-row max being non-finite and fall back to the
             # primary action (margin=0, contrast is a no-op for that

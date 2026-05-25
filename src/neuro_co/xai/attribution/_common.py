@@ -27,7 +27,7 @@ class AttributionTrace:
         `[batch, T]` float tensor of `log pi(a_t | s_t)` (or the
         contrast margin, depending on the method).
     node_scores
-        `[batch, T, N]` float tensor — attribution per node per step.
+        `[batch, T, N]` float tensor, attribution per node per step.
     top_k_nodes
         `[batch, T, K]` long tensor of top-k node indices per step.
     top_k_scores
@@ -86,7 +86,7 @@ def _collect_feature_tensors(td: Any, keys: list[str]) -> dict[str, Tensor]:
 
     Integer-valued features (e.g. CVRPTW's `time_windows`) are cast to
     `float32` so they accept `.requires_grad_()`. The cast tensor is
-    used only for the gradient pass — the env's own state retains its
+    used only for the gradient pass, the env's own state retains its
     native dtype.
 
     Boolean tensors (e.g.PDP's `to_deliver`, CVRP's `visited`) are
@@ -203,7 +203,7 @@ def _safe_action(action: Tensor, mask: Tensor | None) -> Tensor:
     """Clamp action indices for batch elements whose mask row is empty.
 
     Returns a new tensor where any row with no valid action is
-    replaced by `0` (a harmless index — the caller is expected to
+    replaced by `0` (a harmless index, the caller is expected to
     have already decided not to record / progress those envs). When
     `mask` is `None`, the input action is returned unchanged.
     """

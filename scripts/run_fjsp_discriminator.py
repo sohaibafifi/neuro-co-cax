@@ -1,4 +1,4 @@
-"""FJSP discriminative metric (review item: rank-aligned sanity-check).
+"""FJSP discriminative metric (rank-aligned sanity-check substrate).
 
 Top-$1$ family agreement on FJSP is uniformly $1.00$ across the
 five methods, so the headline table cannot discriminate them on
@@ -15,7 +15,7 @@ Per (instance, decoding cell):
 For FJSP K=2 families (precedence, eligibility), so cosine is
 informative even though Kendall's tau degenerates.
 
-Output: experiments/kbs_fjsp_cosine/fjsp_seed{N}.json
+Output: experiments/fjsp_discriminator/fjsp_seed{N}.json
 """
 
 from __future__ import annotations
@@ -194,7 +194,7 @@ def run(seed: int = 0, batch: int = 16, max_steps: int = 8) -> dict:
         "n_certified_cells": n_cells,
         "methods": results,
     }
-    out_dir = Path("experiments/kbs_fjsp_cosine")
+    out_dir = Path("experiments/fjsp_discriminator")
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"fjsp_seed{int(seed)}.json"
     (out_dir / fname).write_text(json.dumps(out, indent=2))

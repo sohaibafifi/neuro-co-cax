@@ -3,12 +3,12 @@
 Two backends, both producing the same dict shape
 `{constraint_family: lambda_c}`:
 
-  - `lp` — solve the problem's LP relaxation via OR-Tools GLOP,
+  - `lp`, solve the problem's LP relaxation via OR-Tools GLOP,
     extract `constraint.dual_value()` per constraint, aggregate
     by family. Tight when the LP relaxation has a small integrality
     gap; **the v0.2 reference** for paper-cax §3.1.
 
-  - `subgrad` — Beasley-style Lagrangian subgradient ascent on a
+  - `subgrad`, Beasley-style Lagrangian subgradient ascent on a
     relaxed subproblem. Doesn't need an LP solver; works with any
     combinatorial relaxation. Useful where the LP encoding is
     expensive (set-partitioning needs column-generation) or

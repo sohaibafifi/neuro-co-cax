@@ -9,7 +9,7 @@ For each decoding step `t` we record:
   `(grad x feature)`;
 - the top-k attributed node indices and their scores.
 
-The implementation is policy-agnostic — anything implementing the
+The implementation is policy-agnostic, anything implementing the
 `__call__(td, ...) -> {"actions": ..., "log_likelihood": ...}` shape
 that rl4co policies expose works. No custom encoder / decoder hooks
 required.

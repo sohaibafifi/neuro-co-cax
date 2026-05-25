@@ -35,7 +35,7 @@ class SufficiencyReport:
     """Counterpart to deletion: keep ONLY top-k, mask everything else.
 
     A high `mean_keep_rate` means the top-k nodes alone reproduce the
-    original action — strong evidence the attribution captures what the
+    original action, strong evidence the attribution captures what the
     policy used.
     """
 
@@ -88,7 +88,7 @@ def _mask_features_outside_topk(
         if not isinstance(t, torch.Tensor):
             continue
         # Integer features (JSSP `proc_times`, FJSP `num_eligible`)
-        # never used to mask out before — they fell through this
+        # never used to mask out before, they fell through this
         # guard and left sufficiency_keep_rate trivially at 1.0 for
         # scheduling problems. Preserve the original dtype on write
         # so the env doesn't crash on a float-where-int-expected.
@@ -115,7 +115,7 @@ def _mask_features_outside_topk(
         b = t.shape[0]
         keep = torch.zeros(b, n, dtype=torch.bool, device=t.device)
         # Clamp indices to valid range (defensive; depot-omitted feats
-        # have N-1 nodes — silently drop out-of-range hits).
+        # have N-1 nodes, silently drop out-of-range hits).
         idx = top_nodes.clamp(0, n - 1)
         keep.scatter_(1, idx, True)
 
