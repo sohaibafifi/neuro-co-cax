@@ -36,9 +36,9 @@ from typing import Any
 
 import torch
 
-from neuro_co.cax.feasibility import is_feasible
 from neuro_co.xai.attribution import step_logits
 from neuro_co.xai.attribution._common import _encode
+from neuro_co.cax.feasibility import is_feasible
 
 
 @dataclass
@@ -218,18 +218,12 @@ def cp_counterfactual(
                 for dz in shot_delta.values():
                     cand_l1 = cand_l1 + dz.detach().cpu().abs().flatten(1).sum(dim=-1)
 
-                # Provisional accept: feasible + flipped + smaller L1.
+                # Provisional accept: arithmetic-feasible + flipped +
+                # smaller L1. CSP-cert is deferred to a single
+                # per-(b, t) pass after the shot loop -- previously
+                # the solver fired per provisional shot which made
+                # cp_sat mode O(B*T*M) solver calls; now O(B*T).
                 provisional = feas & cand_flipped & (cand_l1 < best_l1)
-
-                # Stage 2 (M3.5): for cp_sat mode, run the expensive
-                # CP-SAT decision only on provisional survivors. This
-                # keeps the per-step cost bounded by O(1) solver call
-                # rather than O(max_shots).
-                if feasibility_mode == "cp_sat" and provisional.any():
-                    cp_feas = is_feasible(
-                        shot_state, problem, mode="cp_sat", time_limit_s=time_limit_s
-                    )
-                    provisional = provisional & cp_feas
 
                 if provisional.any():
                     idx = provisional.nonzero(as_tuple=False).flatten().tolist()
@@ -238,6 +232,42 @@ def cp_counterfactual(
                         best_new_action[b] = cand_action[b]
                         for key in best_delta:
                             best_delta[key][b] = shot_delta[key][b].detach()
+
+            # Deferred CSP-cert (M3.5 refactor): for elements with an
+            # arithmetic-feasible L1 winner, assemble the perturbed
+            # batch state from the locked deltas and CSP-test in one
+            # pass. Rejected winners are reverted to "no flip" -- the
+            # same semantics as the old per-shot filter at the
+            # granularity of the L1-best survivor (we lose flips that
+            # would have been recovered by CSP-passing runners-up,
+            # but the cost is a single solver call per cell instead
+            # of M, and the rejection rate is small in practice
+            # because the arithmetic check already enforces the
+            # primary structural constraints).
+            if feasibility_mode == "cp_sat":
+                survivors = best_l1.isfinite()
+                if survivors.any():
+                    cf_state = state.clone(recurse=False)
+                    for key in feature_keys:
+                        if key not in state or key not in best_delta:
+                            continue
+                        t_ref = state[key].float()
+                        cf_state[key] = (t_ref + best_delta[key]).to(state[key].dtype)
+                    cp_feas = is_feasible(
+                        cf_state,
+                        problem,
+                        mode="cp_sat",
+                        time_limit_s=time_limit_s,
+                    )
+                    rejected = survivors & (~cp_feas)
+                    if rejected.any():
+                        for b in rejected.nonzero(as_tuple=False).flatten().tolist():
+                            best_l1[b] = float("inf")
+                            best_new_action[b] = orig_action[b]
+                            for key in best_delta:
+                                best_delta[key][b] = torch.zeros_like(
+                                    best_delta[key][b]
+                                )
 
             # Lock per-step results.
             for key in delta_accum:

@@ -60,6 +60,124 @@ from neuro_co.cax.constraint_map import PROBLEM_CONSTRAINTS, get_constraints
 from neuro_co.cax.cp_counterfactual import cp_counterfactual
 from neuro_co.cax.lambda_attribution import lambda_attribution
 
+
+_GENERIC_METHOD_KEYS = {
+    "gradient", "ig", "integrated_gradients",
+    "deeplift", "dl",
+    "contrastive", "ctr",
+}
+
+
+def _top_family_per_step_for_method(
+    method: str,
+    model: Any,
+    env: Any,
+    td: Any,
+    *,
+    problem: str,
+    families: list[tuple[str, tuple[str, ...]]],
+    max_steps: int,
+) -> torch.Tensor:
+    """Return a ``[B, T]`` long tensor of the top-1 constraint family
+    per decoding cell, for any of the supported attribution methods.
+
+    The CAX backends (``proxy``, ``lp``, ``subgrad``) go through
+    ``lambda_attribution``. Generic methods (``gradient``,
+    ``ig``/``integrated_gradients``, ``deeplift``/``dl``,
+    ``contrastive``/``ctr``) are run once per constraint family
+    with that family's feature keys; the per-family scalar is the
+    sum of ``node_scores`` over decoding cells, and we argmax to
+    obtain the top family. K families means K backward-pass runs
+    per cell.
+    """
+    method = method.lower()
+    if method in {"proxy", "lp", "subgrad"}:
+        mult_arg: str | None = None if method == "proxy" else method
+        attr = lambda_attribution(
+            model, env, td, problem=problem, max_steps=max_steps,
+            multipliers=mult_arg,
+        )
+        return attr.top_family_per_step()
+
+    if method not in _GENERIC_METHOD_KEYS:
+        raise ValueError(
+            f"Unknown attribution method {method!r}; expected one of "
+            f"{{proxy, lp, subgrad, gradient, ig, deeplift, contrastive}}."
+        )
+
+    # Lazy imports so the public mirror does not require neuro-co-attr
+    # for the CAX-only adjudication path.
+    from neuro_co.xai.attribution.gradient import gradient_attribution
+    from neuro_co.xai.attribution.ig import integrated_gradients
+    from neuro_co.xai.attribution.deeplift import deeplift_attribution
+    from neuro_co.xai.attribution.contrastive import contrastive_attribution
+
+    policy = model.policy if hasattr(model, "policy") else model
+    available_keys = set(td.keys())
+
+    def run_attr(feature_keys: tuple[str, ...]) -> torch.Tensor:
+        # Keep all Tensor-valued keys; the gradient attributor casts
+        # int tensors to float32 internally (rl4co's CVRPTW stores
+        # time_windows as int but it still contributes to gradient
+        # mass once cast). We drop only bool tensors, which crash
+        # the downstream env step on float arithmetic.
+        present = tuple(
+            k for k in feature_keys
+            if k in available_keys
+            and hasattr(td[k], "dtype")
+            and td[k].dtype != torch.bool
+        )
+        B = int(td.batch_size[0])
+        if not present:
+            return torch.zeros(B, max_steps)
+        try:
+            if method == "gradient":
+                trace = gradient_attribution(
+                    policy, env, td, feature_keys=present, top_k=1,
+                    max_steps=max_steps,
+                )
+            elif method in {"ig", "integrated_gradients"}:
+                trace = integrated_gradients(
+                    policy, env, td, feature_keys=present, top_k=1,
+                    max_steps=max_steps, ig_steps=8, problem=problem,
+                )
+            elif method in {"deeplift", "dl"}:
+                trace = deeplift_attribution(
+                    policy, env, td, feature_keys=present, top_k=1,
+                    max_steps=max_steps, problem=problem,
+                )
+            else:  # contrastive / ctr
+                trace = contrastive_attribution(
+                    policy, env, td, feature_keys=present, top_k=1,
+                    max_steps=max_steps,
+                )
+        except RuntimeError as exc:
+            # E.g. DeepLIFT can hit a shape mismatch deep in the
+            # rescale hook on certain backbones, and the per-family
+            # rollout may legitimately produce zero decoding steps
+            # when the policy terminates immediately on a single
+            # eligible action. Return an all-zero mass tensor so
+            # the family-argmax falls back to the first family
+            # rather than crashing the entire adjudication.
+            print(
+                f"[adjudicate] method={method!r} attribution failed "
+                f"on feature_keys={present}: {type(exc).__name__}: {exc}; "
+                f"falling back to zero scores for this family."
+            )
+            return torch.zeros(B, max_steps)
+        # node_scores: [B, T, N] of per-node mass for this family.
+        # Aggregate by summing over the node dimension.
+        return trace.node_scores.sum(dim=-1).cpu()  # [B, T]
+
+    per_family_total: list[torch.Tensor] = []
+    for _name, keys in families:
+        per_family_total.append(run_attr(keys))
+    # Pad/truncate to the common T (the shortest run wins).
+    T_min = min(t.shape[1] for t in per_family_total)
+    per_family_total = [t[:, :T_min] for t in per_family_total]
+    stacked = torch.stack(per_family_total, dim=-1)  # [B, T_min, K]
+    return stacked.argmax(dim=-1)  # [B, T_min]
+
 # Default per-feature epsilon for the three paper benchmarks.
 # Override via `eps_per_problem[problem][feature_key]`.
 DEFAULT_EPS_PER_PROBLEM: dict[str, dict[str, float]] = {
@@ -128,6 +246,12 @@ def adjudicate_run(
     families = get_constraints(problem)
     constraint_names = [name for name, _ in families]
 
+    import time as _time
+    t0 = _time.time()
+    print(f"[adjudicate] {run_dir.name} problem={problem} "
+          f"modes={list(modes)} B={num_instances} T={max_steps} M={cf_shots} "
+          f"feasibility={feasibility_mode}", flush=True)
+
     env, model = _instantiate(cfg)
     _load_ckpt(model, _resolve_ckpt(run_dir))
     device = _pick_device()
@@ -137,16 +261,20 @@ def adjudicate_run(
     # fresh batch and the (b, t) cells aren't comparable across runs.
     torch.manual_seed(int(seed))
     td = env.reset(batch_size=num_instances).to(device)
+    print(f"[adjudicate]   model loaded ({_time.time()-t0:.1f}s)", flush=True)
 
-    # ---- Lambda-attribution per mode ----
+    # ---- Per-method top-family-per-step tensors ----
     lambda_top: dict[str, torch.Tensor] = {}
     for mode in modes:
-        mult_arg: str | None = None if mode == "proxy" else mode
-        attr = lambda_attribution(
-            model, env, td, problem=problem, max_steps=max_steps, multipliers=mult_arg
+        t_m = _time.time()
+        print(f"[adjudicate]   running attribution method={mode!r} ...", flush=True)
+        lambda_top[mode] = _top_family_per_step_for_method(
+            mode, model, env, td,
+            problem=problem,
+            families=families,
+            max_steps=max_steps,
         )
-        # top-family per step from the [B, T, K] scores tensor.
-        lambda_top[mode] = attr.top_family_per_step()  # [B, T]
+        print(f"[adjudicate]   {mode!r} done in {_time.time()-t_m:.1f}s", flush=True)
 
     # ---- CP-counterfactual ground truth ----
     feature_keys = tuple(eps_per_key.keys()) if eps_per_key else ()
@@ -155,6 +283,9 @@ def adjudicate_run(
             f"No eps_per_problem entry for problem={problem!r}; pass "
             f"`eps_per_problem={{problem: {{key: eps, ...}}}}` explicitly."
         )
+    t_cf = _time.time()
+    print(f"[adjudicate]   running counterfactual search (M={cf_shots} shots, "
+          f"feasibility={feasibility_mode}) ...", flush=True)
     cf = cp_counterfactual(
         model, env, td,
         problem=problem,
@@ -168,6 +299,9 @@ def adjudicate_run(
         feasibility_mode=feasibility_mode,
         time_limit_s=cp_sat_time_limit_s,
     )
+    n_flipped = int(cf.flipped.sum().item())
+    print(f"[adjudicate]   counterfactual done in {_time.time()-t_cf:.1f}s "
+          f"({n_flipped} flipped cells)", flush=True)
 
     # For each (b, t) where CF flipped, identify the constraint
     # family carrying the largest delta-L1 mass.

@@ -73,11 +73,15 @@ def vrptw_cp_is_feasible(td: Any, *, time_limit_s: float = 1.0) -> torch.Tensor:
 
 
 def _slice_batch(td: Any, idx: int) -> Any:
-    """Build a 1-element TensorDict view at batch index `idx`."""
-    sub = td.clone(recurse=False)
-    for k in list(sub.keys()):
-        v = sub[k]
-        if hasattr(v, "ndim") and v.ndim > 0 and v.shape[0] > idx:
-            sub[k] = v[idx : idx + 1]
-    sub.batch_size = (1,)
-    return sub
+    """Build a 1-element TensorDict view at batch index `idx`.
+
+    Uses the TensorDict's native slice operator so the batch_size
+    metadata stays consistent with the sliced values; the previous
+    "clone + overwrite" path silently triggered a
+    `batch dimension mismatch` exception inside `__setitem__`,
+    causing every per-instance CSP feasibility call to fail and
+    `vrptw_cp_is_feasible` to silently return False for every
+    element (the surrounding `try / except Exception` swallowed
+    the error). Result: zero CSP-certified flips on VRPTW.
+    """
+    return td[idx : idx + 1]

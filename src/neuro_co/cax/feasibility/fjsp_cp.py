@@ -2,9 +2,9 @@
 
 Upgrades the arithmetic check in `fjsp.py` from "structural
 sanity" to "does there exist a feasible FJSP schedule for this
-instance?" via the OR-Tools CP-SAT model registered as
-`BASELINE_SOLVERS[("fjsp", "ortools")]` in
-`neuro_co.problems.fjsp.ortools`.
+instance?" via the CP-SAT model registered as
+`BASELINE_SOLVERS[("fjsp", "cpsat")]` in
+`neuro_co.problems.fjsp.cpsat`.
 
 FJSP is always schedulable if every real op has at least one
 eligible machine and processing times are non-negative -- the
@@ -28,20 +28,30 @@ import torch
 
 
 def fjsp_cp_is_feasible(td: Any, *, time_limit_s: float = 3.0) -> torch.Tensor:
-    """Per-batch CP-SAT feasibility for FJSP. Returns `[B]` bool."""
+    """Per-batch CP-SAT feasibility for FJSP. Returns `[B]` bool.
+
+    Calls the underlying solver with `feasibility_only=True`: the
+    makespan-minimising objective is dropped and CP-SAT halts at
+    the first valid schedule. This converts a COP pass into a CSP
+    feasibility-decision and matches the VRPTW path. Arithmetic
+    pre-filter still rules out structurally infeasible cases.
+    """
     from neuro_co.problems import BASELINE_SOLVERS, load_plugins
 
     load_plugins()  # ensure problem plug-ins register their solvers
-    key = ("fjsp", "ortools")
-    if key not in BASELINE_SOLVERS:
-        from neuro_co.cax.feasibility.fjsp import fjsp_is_feasible
+    key = ("fjsp", "cpsat")
+    from neuro_co.cax.feasibility.fjsp import fjsp_is_feasible
 
-        return fjsp_is_feasible(td)
+    arithmetic_ok = fjsp_is_feasible(td)
+    if key not in BASELINE_SOLVERS or not arithmetic_ok.any():
+        return arithmetic_ok
 
     solver = BASELINE_SOLVERS[key]
     B = int(td.batch_size[0])
-    ok = torch.zeros(B, dtype=torch.bool)
+    ok = arithmetic_ok.clone()
     for b in range(B):
+        if not bool(arithmetic_ok[b]):
+            continue
         instance = {
             k: td[k][b]
             for k in (
@@ -55,7 +65,11 @@ def fjsp_cp_is_feasible(td: Any, *, time_limit_s: float = 3.0) -> torch.Tensor:
             if k in td
         }
         try:
-            _schedule, cost = solver(instance, max_runtime=time_limit_s)
+            _schedule, cost = solver(
+                instance,
+                max_runtime=time_limit_s,
+                feasibility_only=True,
+            )
             ok[b] = not (cost is None or (isinstance(cost, float) and isnan(cost)))
         except Exception:
             ok[b] = False
