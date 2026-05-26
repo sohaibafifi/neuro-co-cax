@@ -92,6 +92,27 @@ report = deletion_flip_rate(trace, policy, env, td, top_k=5, baseline="mean")
 print(report.mean_flip_rate)
 ```
 
+## Full pipeline (train + explain + figures)
+
+One command reproduces every stage on CVRPTW + OP + FJSP across
+three seeds:
+
+```bash
+bash scripts/reproduce_all.sh                    # default: 5 epochs/problem
+EPOCHS=50 bash scripts/reproduce_all.sh          # production-quality
+PROBLEMS="vrptw op" SEEDS="0 1" bash scripts/reproduce_all.sh
+SKIP_TRAIN=1 bash scripts/reproduce_all.sh       # reuse existing checkpoints
+```
+
+The orchestrator (a) trains a policy per (problem, seed) via
+`scripts/train.py` (rl4co `AttentionModel` for CVRPTW + OP,
+`L2DModel` for FJSP), (b) runs the multi-method top-1 family
+adjudication with CSP-certified counterfactuals, (c) computes
+deletion-curve flip-rate AUC, (d) computes the Bonferroni-PAC
+sufficient subset on CVRPTW, (e) computes the FJSP
+eligibility-mass discriminator, and (f) regenerates the
+adjudication figure.
+
 ## Multi-method evaluation harness
 
 Three CO problems (CVRPTW, Orienteering, Flexible Job-Shop
