@@ -15,7 +15,7 @@ relaxation:
 
 Companion paper: *Constraint-Anchored Attribution: Feasibility-Certified
 Counterfactuals and Bonferroni-PAC Sufficient Subsets for Neural CO Policies*
-(arXiv: XXXX.XXXXX).
+(arXiv: 2605.25235).
 
 ## Install
 

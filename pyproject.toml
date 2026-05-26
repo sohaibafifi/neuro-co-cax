@@ -46,7 +46,7 @@ dev = ["pytest>=7", "ruff>=0.4", "pyright>=1.1"]
 Homepage = "https://github.com/sohaibafifi/neuro-co-cax"
 Repository = "https://github.com/sohaibafifi/neuro-co-cax"
 Issues = "https://github.com/sohaibafifi/neuro-co-cax/issues"
-Paper = "https://arxiv.org/abs/XXXX.XXXXX"
+Paper = "https://arxiv.org/abs/2605.25235"
 
 [build-system]
 requires = ["hatchling"]
