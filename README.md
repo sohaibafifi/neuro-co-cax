@@ -15,7 +15,7 @@ relaxation:
 
 Companion paper: *Constraint-Anchored Attribution: Feasibility-Certified
 Counterfactuals and Bonferroni-PAC Sufficient Subsets for Neural CO Policies*
-(arXiv: 2605.25235).
+([arXiv: 2605.25235]([/guides/content/editing-an-existing-page](https://arxiv.org/abs/2605.25235)))
 
 ## Install
 
@@ -80,7 +80,7 @@ python examples/adjudicate_all.py --out results/
              Counterfactuals and Bonferroni-PAC Sufficient Subsets for
              Neural CO Policies},
   author  = {Afifi, Sohaib},
-  journal = {arXiv preprint arXiv:XXXX.XXXXX},
+  journal = {arXiv preprint arXiv:2605.25235},
   year    = {2026},
 }
 ```
